@@ -198,4 +198,254 @@
         <textarea id="textoApuntes" placeholder="Observaciones..."></textarea>
         <div class="modal-section">📅 Seguimiento Semanal:</div>
         <div class="modal-grid">
-            <div class="modal-field"><label
+            <div class="modal-field"><label>Sem 1:</label><input type="number" id="mSem1" min="0" max="100" inputmode="numeric"></div>
+            <div class="modal-field"><label>Sem 2:</label><input type="number" id="mSem2" min="0" max="100" inputmode="numeric"></div>
+            <div class="modal-field"><label>Sem 3:</label><input type="number" id="mSem3" min="0" max="100" inputmode="numeric"></div>
+            <div class="modal-field"><label>Sem 4:</label><input type="number" id="mSem4" min="0" max="100" inputmode="numeric"></div>
+            <div class="modal-field"><label>Sem 5:</label><input type="number" id="mSem5" min="0" max="100" inputmode="numeric"></div>
+            <div class="modal-field"><label>Sem 6:</label><input type="number" id="mSem6" min="0" max="100" inputmode="numeric"></div>
+        </div>
+        <button class="btn-sugerir" onclick="sugerirPromedioASaber()">💡 Sugerir Nota Saber</button>
+        <button class="btn-close" onclick="cerrarHistorial()">Guardar y Cerrar</button>
+    </div>
+</div>
+
+<script>
+    let filaActualIndex = null;
+    let datosHistorialAlumnos = {};
+    const URL_IMAGEN_OFICIAL = "https://i.ibb.co/wh1Yp5YM/1000736334.png";
+
+    function verificarSesion() {
+        let perfilGuardado = localStorage.getItem('libreta_docente_2026_v49');
+        let imgPortada = document.getElementById('imgPortadaAvatar');
+        let imgEl = document.querySelector('.portada-img-grande');
+        if (imgPortada) imgPortada.src = URL_IMAGEN_OFICIAL;
+
+        if (imgEl) imgEl.classList.remove('minimazada');
+        document.getElementById('seccionFase1').classList.remove('activo');
+
+        if (perfilGuardado) {
+            let perfil = JSON.parse(perfilGuardado);
+            cargarPerfilEnInterfaz(perfil);
+            entrarAlSistema();
+        }
+    }
+
+    function toggleMinimizarYDeslizar() {
+        let img = document.querySelector('.portada-img-grande');
+        if (img) img.classList.toggle('minimazada');
+        document.getElementById('seccionFase1').classList.toggle('activo');
+    }
+
+    function guardarFase1() {
+        let nombre = document.getElementById('regNombre').value.trim();
+        let correo = document.getElementById('regCorreo').value.trim();
+        let celular = document.getElementById('regCelular').value.trim();
+        if (!nombre || !correo || !celular) { alert('Complete nombre, correo y celular.'); return; }
+
+        let nuevoPerfil = {
+            nombre: nombre, correo: correo, celular: celular,
+            ue: 'Unidad Educativa', foto: URL_IMAGEN_OFICIAL, ultimaModificacionFoto: Date.now()
+        };
+        localStorage.setItem('libreta_docente_2026_v49', JSON.stringify(nuevoPerfil));
+        cargarPerfilEnInterfaz(nuevoPerfil);
+        entrarAlSistema();
+    }
+
+    function verificarYCambiarPerfil() {
+        let perfil = JSON.parse(localStorage.getItem('libreta_docente_2026_v49'));
+        let ahora = Date.now();
+        let sieteDiasMs = 7 * 24 * 60 * 60 * 1000;
+
+        if (perfil && perfil.ultimaModificacionFoto && (ahora - perfil.ultimaModificacionFoto < sieteDiasMs)) {
+            let diasRestantes = Math.ceil((sieteDiasMs - (ahora - perfil.ultimaModificacionFoto)) / (1000 * 60 * 60 * 24));
+            alert('⏳ Tu foto está protegida por 7 días. Faltan ' + diasRestantes + ' días.');
+            return;
+        }
+        if (confirm('¿Deseas cambiar tu foto de perfil ahora?')) {
+            document.getElementById('inputGlobalFoto').click();
+        }
+    }
+
+    function procesarCambioFotoDirecto(event) {
+        let archivo = event.target.files[0];
+        if (archivo) {
+            let lector = new FileReader();
+            lector.onload = function(e) {
+                let perfil = JSON.parse(localStorage.getItem('libreta_docente_2026_v49'));
+                if (perfil) {
+                    perfil.foto = e.target.result;
+                    perfil.ultimaModificacionFoto = Date.now();
+                    localStorage.setItem('libreta_docente_2026_v49', JSON.stringify(perfil));
+                    cargarPerfilEnInterfaz(perfil);
+                    alert('✨ ¡Foto actualizada!');
+                }
+            };
+            lector.readAsDataURL(archivo);
+        }
+    }
+
+    function cargarPerfilEnInterfaz(perfil) {
+        document.getElementById('lblProfesorNombre').innerText = perfil.nombre;
+        document.getElementById('lblUnidadEducativa').innerText = perfil.ue;
+        document.getElementById('prof').value = perfil.nombre;
+        document.getElementById('ue').value = perfil.ue;
+        if (perfil.foto) {
+            document.getElementById('avatarCentral').src = perfil.foto;
+            let imgPortada = document.getElementById('imgPortadaAvatar');
+            if (imgPortada) imgPortada.src = perfil.foto;
+        }
+    }
+
+    function entrarAlSistema() {
+        document.getElementById('portadaAcceso').style.display = 'none';
+        document.getElementById('panelPrincipal').classList.add('visible');
+        cargarDatos();
+    }
+
+    function bloquearSesion() {
+        guardarLocalmenteSilencioso();
+        document.getElementById('panelPrincipal').classList.remove('visible');
+        let imgEl = document.querySelector('.portada-img-grande');
+        if (imgEl) imgEl.classList.remove('minimazada');
+        document.getElementById('portadaAcceso').style.display = 'flex';
+        verificarSesion();
+    }
+
+    function formatearTexto(texto) { return texto.toLowerCase().replace(/(^|\s)\S/g, l => l.toUpperCase()); }
+    function limpiarTabla() { document.getElementById('cuerpo-tabla').innerHTML = ''; }
+
+    function agregarAlumno(nombre = '', ser = 0, saber = 0, hacer = 0, decidir = 0, hist = null) {
+        let tbody = document.getElementById('cuerpo-tabla');
+        let index = tbody.rows.length;
+        if (hist) datosHistorialAlumnos[index] = hist;
+        else if (!datosHistorialAlumnos[index]) datosHistorialAlumnos[index] = { apuntes: '', sem1: 0, sem2: 0, sem3: 0, sem4: 0, sem5: 0, sem6: 0 };
+
+        let fila = tbody.insertRow();
+        fila.innerHTML = `
+            <td>${index + 1}</td>
+            <td><input type="text" class="nombre-input" value="${formatearTexto(nombre)}" oninput="this.value = formatearTexto(this.value)"></td>
+            <td><input type="number" class="ser" value="${ser}" min="0" max="10" oninput="calcularFinal(this)" inputmode="numeric"></td>
+            <td><input type="number" class="saber" value="${saber}" min="0" max="35" oninput="calcularFinal(this)" inputmode="numeric"></td>
+            <td><input type="number" class="hacer" value="${hacer}" min="0" max="35" oninput="calcularFinal(this)" inputmode="numeric"></td>
+            <td><input type="number" class="decidir" value="${decidir}" min="0" max="20" oninput="calcularFinal(this)" inputmode="numeric"></td>
+            <td><input type="text" class="final final-val" value="0" readonly></td>
+            <td><button class="btn-historial" onclick="abrirHistorial(${index})">📖 Historial</button></td>
+        `;
+        calcularFinal(fila.querySelector('.ser'));
+    }
+
+    function calcularFinal(el) {
+        let fila = el.closest('tr');
+        let total = (parseFloat(fila.querySelector('.ser').value) || 0) +
+                    (parseFloat(fila.querySelector('.saber').value) || 0) +
+                    (parseFloat(fila.querySelector('.hacer').value) || 0) +
+                    (parseFloat(fila.querySelector('.decidir').value) || 0);
+        if (total > 100) total = 100;
+        let finalInput = fila.querySelector('.final');
+        finalInput.value = total.toFixed(0);
+        finalInput.className = 'final final-val ' + (total >= 81 ? 'zona-verde' : (total >= 51 ? 'zona-amarilla' : 'zona-roja'));
+        actualizarEstadisticas();
+    }
+
+    function actualizarEstadisticas() {
+        let filas = document.querySelectorAll('#cuerpo-tabla tr');
+        let v = 0, a = 0, r = 0;
+        filas.forEach(f => {
+            let val = parseFloat(f.querySelector('.final').value) || 0;
+            if (val >= 81) v++; else if (val >= 51) a++; else r++;
+        });
+        document.getElementById('statTotal').innerText = filas.length;
+        document.getElementById('statVerde').innerText = v;
+        document.getElementById('statAmarillo').innerText = a;
+        document.getElementById('statRojo').innerText = r;
+    }
+
+    function sugerirPromedioASaber() {
+        if (filaActualIndex === null) return;
+        let vals = [1,2,3,4,5,6].map(i => parseFloat(document.getElementById('mSem' + i).value) || 0).filter(v => v > 0);
+        let prom = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : 0;
+        let sugerido = Math.round((prom * 35) / 100);
+        document.querySelectorAll('#cuerpo-tabla tr')[filaActualIndex].querySelector('.saber').value = sugerido;
+        calcularFinal(document.querySelectorAll('#cuerpo-tabla tr')[filaActualIndex].querySelector('.saber'));
+        alert('💡 Nota sugerida aplicada: ' + sugerido);
+    }
+
+    function abrirHistorial(index) {
+        filaActualIndex = index;
+        let hist = datosHistorialAlumnos[index] || { apuntes: '', sem1: 0, sem2: 0, sem3: 0, sem4: 0, sem5: 0, sem6: 0 };
+        document.getElementById('modalTitulo').innerText = "Historial Alumno #" + (index + 1);
+        document.getElementById('textoApuntes').value = hist.apuntes;
+        for(let i=1; i<=6; i++) document.getElementById('mSem'+i).value = hist['sem'+i] || 0;
+        document.getElementById('modalHistorial').style.display = 'flex';
+    }
+
+    function cerrarHistorial() {
+        if (filaActualIndex !== null) {
+            let hist = { apuntes: document.getElementById('textoApuntes').value };
+            for(let i=1; i<=6; i++) hist['sem'+i] = document.getElementById('mSem'+i).value;
+            datosHistorialAlumnos[filaActualIndex] = hist;
+        }
+        document.getElementById('modalHistorial').style.display = 'none';
+        filaActualIndex = null;
+    }
+
+    function obtenerClaveStorage() { return 'libreta_v49_' + document.getElementById('materiaSelect').value; }
+
+    function guardarLocalmenteSilencioso() {
+        let datos = {
+            ue: document.getElementById('ue').value, prof: document.getElementById('prof').value,
+            curso: document.getElementById('curso').value, trimestre: document.getElementById('trimestre').value,
+            historiales: datosHistorialAlumnos, alumnos: []
+        };
+        document.querySelectorAll('#cuerpo-tabla tr').forEach(f => {
+            datos.alumnos.push({
+                nombre: f.querySelector('.nombre-input').value, ser: f.querySelector('.ser').value,
+                saber: f.querySelector('.saber').value, hacer: f.querySelector('.hacer').value, decidir: f.querySelector('.decidir').value
+            });
+        });
+        localStorage.setItem(obtenerClaveStorage(), JSON.stringify(datos));
+    }
+
+    function guardarLocalmente() { guardarLocalmenteSilencioso(); alert('💾 ¡Guardado con éxito!'); }
+
+    function cargarDatos() {
+        limpiarTabla();
+        datosHistorialAlumnos = {};
+        let guardado = localStorage.getItem(obtenerClaveStorage());
+        if (guardado) {
+            let datos = JSON.parse(guardado);
+            document.getElementById('ue').value = datos.ue || '';
+            document.getElementById('prof').value = datos.prof || '';
+            document.getElementById('curso').value = datos.curso || '';
+            document.getElementById('trimestre').value = datos.trimestre || '';
+            datosHistorialAlumnos = datos.historiales || {};
+            if (datos.alumnos && datos.alumnos.length) {
+                datos.alumnos.forEach((a, i) => agregarAlumno(a.nombre, a.ser, a.saber, a.hacer, a.decidir, datos.historiales ? datos.historiales[i] : null));
+            } else { agregarAlumno(''); }
+        } else { agregarAlumno(''); }
+        actualizarEstadisticas();
+    }
+
+    function cambiarMateria() { cargarDatos(); }
+
+    function exportarExcelMovil() {
+        let csv = [];
+        let filas = document.querySelectorAll("#tabla-principal tr");
+        filas.forEach(f => {
+            let fila = [];
+            f.querySelectorAll("td input, th").forEach(c => fila.push('"' + (c.value !== undefined ? c.value : c.innerText) + '"'));
+            csv.push(fila.join(","));
+        });
+        let link = document.createElement("a");
+        link.href = encodeURI("data:text/csv;charset=utf-8,\ufeff" + csv.join("\n"));
+        link.download = "libreta_2026.csv";
+        link.click();
+    }
+
+    function exportarPDFMovil() { window.print(); }
+
+    window.onload = function() { verificarSesion(); };
+</script>
+</body>
+</html>
